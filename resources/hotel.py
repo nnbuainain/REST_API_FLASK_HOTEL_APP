@@ -1,40 +1,16 @@
 from flask_restful import Resource, reqparse
 from models.hotel import HotelModel
 
-hoteis = [
-        {
-        'hotel_id': 'cayman',
-        'nome': 'Hotel Cayman',
-        'estrelas': 4.9,
-        'diaria': 780,
-        'cidade': 'Corumbá'
-        },
-        {
-        'hotel_id': 'toca_onca',
-        'nome': 'Hotel Toca da Onca',
-        'estrelas': 4.4,
-        'diaria': 280,
-        'cidade': 'Cáceres'
-        },
-        {
-        'hotel_id': 'bodoquena',
-        'nome': 'Hotel Bodoquena',
-        'estrelas': 4.3,
-        'diaria': 190,
-        'cidade': 'Bodoquena'
-        },
-        ]
-
 class Hoteis(Resource):
     def get(self):
-        return {'hoteis': hoteis}
+        return {'hoteis': [hotel.to_json() for hotel in HotelModel.query.all()]}
 
 class Hotel(Resource):
     argumentos = reqparse.RequestParser()
-    argumentos.add_argument('nome')
-    argumentos.add_argument('estrelas')
-    argumentos.add_argument('diaria')
-    argumentos.add_argument('cidade')
+    argumentos.add_argument('nome', type = str, required = True, help = "the field nome cannot be blank")
+    argumentos.add_argument('estrelas', type = float, required = True, help = "the field estrela cannot be blank")
+    argumentos.add_argument('diaria', type = float)
+    argumentos.add_argument('cidade', type = str)
 
     def find_hotel(hotel_id):
         for hotel in hoteis:
@@ -44,51 +20,59 @@ class Hotel(Resource):
         return None
     
     def get(self, hotel_id):
-        hotel = Hotel.find_hotel(hotel_id)        
+        hotel = HotelModel.find_hotel(hotel_id)        
         
         if hotel:
-            return hotel
+            return hotel.to_json()
         
         return {'message': 'Hotel not found.'}, 404 #not found
 
     def post(self, hotel_id):
+        if HotelModel.find_hotel(hotel_id):
+            return {"message": "Hotel id '{}' already exists.".format(hotel_id)}, 400 # BAD REQUEST
+
         dados = Hotel.argumentos.parse_args()
         
-        novo_hotel_objeto = HotelModel(hotel_id, **dados)
-        novo_hotel = novo_hotel_objeto.convert_to_json()
+        hotel = HotelModel(hotel_id, **dados)
+        
+        try:
+            hotel.save_hotel()
+        except:
+            return {"message" : "an internal error occurred while saving hotel"}, 500
 
-        hoteis.append(novo_hotel)
+        return hotel.to_json(), 200
 
-        return novo_hotel, 200
 
     def put(self, hotel_id):
         dados = Hotel.argumentos.parse_args()
         
-        novo_hotel_objeto = HotelModel(hotel_id, **dados)
-        novo_hotel = novo_hotel_objeto.convert_to_json()
+        hotel_encontrado = HotelModel.find_hotel(hotel_id)
+        
+        if hotel_encontrado:
+            hotel_encontrado.update_hotel(**dados)
+            hotel_encontrado.save_hotel()
+            return hotel_encontrado.to_json(), 200 #OK
 
-        hotel = Hotel.find_hotel(hotel_id)
-        if hotel:
-            hotel.update(novo_hotel)
-            return novo_hotel, 200 #OK
+        hotel = HotelModel(hotel_id, **dados)
         
-        hoteis.append(novo_hotel)
-        
-        return novo_hotel, 201 # CREATED
+        try:
+            hotel.save_hotel()
+        except:
+            return {"message" : "an internal error occurred while saving hotel"}, 500
+
+        return hotel.to_json(), 201 #CREATED
+
 
     def delete(self, hotel_id):
-        for hotel in hoteis:
-            if hotel['hotel_id'] == hotel_id:
-                hoteis.remove(hotel)
-                return {'message':'Hotel delete'}
-        return {'message':'Hotel not found'}
+        hotel = HotelModel.find_hotel(hotel_id)
+        
+        if hotel:
+            try:
+                hotel.delete_hotel()
+            
+            except:
+                return {"message" : "an internal error occurred while saving hotel"}, 500
 
-    '''SOLUCAO DO PROF
-    Achei interessante essa solução. Porém ela percorre todos os itens
-    da lista mesmo já tendo achado o id a ser deletado
-    para listas muito longas ela pode ser uma solução mais lenta'''
-    
-    # def delete(self, hotel_id):
-    #     global hoteis
-    #     hoteis = [hotel for hotel in hoteis if hotel['hotel_id'] != hotel_id]
-    #     return {'message': 'Hotel deleted'}
+            return {"message":"Hotel '{}' deleted".format(hotel_id)}
+        
+        return {'message':'Hotel not found'}
