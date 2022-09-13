@@ -8,13 +8,16 @@ class HotelModel(banco.Model):
     estrelas = banco.Column(banco.Float(precision=1))
     diaria = banco.Column(banco.Float(precision=2))
     cidade = banco.Column(banco.String(40))
+    site_id = banco.Column(banco.Integer, banco.ForeignKey('sites.site_id'))
 
-    def __init__(self, hotel_id, nome, estrelas, diaria, cidade):
+    def __init__(self, hotel_id, nome, estrelas, diaria, cidade, site_id):
         self.hotel_id = hotel_id
         self.nome = nome
         self.estrelas = estrelas
         self.diaria = diaria
         self.cidade = cidade
+        self.site_id = site_id
+        #site = banco.relationship('SiteModel')
     
     def to_json(self):
         return {
@@ -23,6 +26,7 @@ class HotelModel(banco.Model):
             'estrelas' : self.estrelas,
             'diaria' : self.diaria,
             'cidade' : self.cidade,
+            'site_id' : self.site_id
         }
     
     @classmethod

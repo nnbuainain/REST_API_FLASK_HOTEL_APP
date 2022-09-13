@@ -1,9 +1,55 @@
 from flask_restful import Resource, reqparse
 from models.hotel import HotelModel
+from models.site import SiteModel
+from resources.filtros import normalize_path_params, consulta_sem_cidade, consulta_com_cidade
 from flask_jwt_extended import jwt_required
+import sqlite3
+
+
+path_params = reqparse.RequestParser()
+path_params.add_argument("cidade", type = str)
+path_params.add_argument("estrelas_min", type = float)
+path_params.add_argument("estrelas_max", type = float)
+path_params.add_argument("diaria_min", type = float)
+path_params.add_argument("diaria_max", type = float)
+path_params.add_argument("limit", type = int)
+path_params.add_argument("offset", type = int)
+
 class Hoteis(Resource):
     def get(self):
-        return {'hoteis': [hotel.to_json() for hotel in HotelModel.query.all()]}
+        connection = sqlite3.connect('banco.db')
+        cursor = connection.cursor()
+
+        dados = path_params.parse_args()
+
+        dados_validos = {chave:dados[chave] for chave in dados if dados[chave] is not None}
+
+        parametros = normalize_path_params(**dados_validos)
+
+        if not parametros.get('cidade'):
+            valores_parametros = tuple([parametros[chave] for chave in parametros]) 
+
+            resultado = cursor.execute(consulta_sem_cidade, valores_parametros)
+            
+        else:
+            valores_parametros = tuple([parametros[chave] for chave in parametros]) 
+
+            resultado = cursor.execute(consulta_com_cidade, valores_parametros)
+
+        hoteis = []
+
+        for linha in resultado:
+            hoteis.append({
+                'hotel_id' : linha[0],
+                'nome' : linha[1],
+                'estrelas' : linha[2],
+                'diaria' : linha[3],
+                'cidade' : linha[4],
+                'site_id' : linha[5]
+            })
+
+        return {'hoteis': hoteis}
+
 
 class Hotel(Resource):
     argumentos = reqparse.RequestParser()
@@ -11,6 +57,7 @@ class Hotel(Resource):
     argumentos.add_argument('estrelas', type = float, required = True, help = "the field estrela cannot be blank")
     argumentos.add_argument('diaria', type = float)
     argumentos.add_argument('cidade', type = str)
+    argumentos.add_argument('site_id', type = int, required = True, help = 'Hotel needs a source website')
 
     def find_hotel(hotel_id):
         for hotel in hoteis:
@@ -35,6 +82,9 @@ class Hotel(Resource):
         dados = Hotel.argumentos.parse_args()
         
         hotel = HotelModel(hotel_id, **dados)
+        
+        if not SiteModel.find_site_by_id(dados.get('site_id')):
+            return {'message' : 'The hotel must have a valid site id'}
         
         try:
             hotel.save_hotel()
