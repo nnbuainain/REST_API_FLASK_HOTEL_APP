@@ -43,4 +43,5 @@ class SiteModel(banco.Model):
         [hotel.delete_hotel() for hotel in self.hoteis]
         banco.session.delete(self)
         banco.session.commit()
+        
 
